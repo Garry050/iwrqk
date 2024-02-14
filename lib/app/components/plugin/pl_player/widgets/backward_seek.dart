@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:iwrqk/i18n/strings.g.dart';
 
 class BackwardSeekIndicator extends StatefulWidget {
   final void Function(Duration) onChanged;
@@ -46,9 +47,11 @@ class BackwardSeekIndicatorState extends State<BackwardSeekIndicator> {
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Color(0x88767676),
-            Color(0x00767676),
+            Color(0x7F000000),
+            Color(0x5F000000),
+            Color(0x00000000),
           ],
+          stops: [0.0, 0.7, 1.0],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
@@ -69,7 +72,7 @@ class BackwardSeekIndicatorState extends State<BackwardSeekIndicator> {
               ),
               const SizedBox(height: 8.0),
               Text(
-                '快退${value.inSeconds}秒',
+                t.player.seconds(value: value.inSeconds),
                 style: const TextStyle(
                   fontSize: 12.0,
                   color: Color(0xFFFFFFFF),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:get/get.dart';
+import 'package:iwrqk/i18n/strings.g.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -68,7 +69,7 @@ class PlPlayerController {
 
   Rx<bool> videoFitChanged = false.obs;
   final Rx<BoxFit> _videoFit = Rx(BoxFit.contain);
-  final Rx<String> _videoFitDesc = Rx('包含');
+  final Rx<String> _videoFitDesc = Rx(t.player.aspect_ratio);
 
   ///
   // ignore: prefer_final_fields
@@ -88,12 +89,12 @@ class PlPlayerController {
   // final Durations durations;
 
   List<Map<String, dynamic>> videoFitType = [
-    {'attr': BoxFit.contain, 'desc': '包含'},
-    {'attr': BoxFit.cover, 'desc': '覆盖'},
-    {'attr': BoxFit.fill, 'desc': '填充'},
-    {'attr': BoxFit.fitHeight, 'desc': '高度适应'},
-    {'attr': BoxFit.fitWidth, 'desc': '宽度适应'},
-    {'attr': BoxFit.scaleDown, 'desc': '缩小适应'},
+    {'attr': BoxFit.contain, 'desc': t.player.aspect_ratios.contain},
+    {'attr': BoxFit.cover, 'desc': t.player.aspect_ratios.cover},
+    {'attr': BoxFit.fill, 'desc': t.player.aspect_ratios.fill},
+    {'attr': BoxFit.fitHeight, 'desc': t.player.aspect_ratios.fit_height},
+    {'attr': BoxFit.fitWidth, 'desc': t.player.aspect_ratios.fit_width},
+    {'attr': BoxFit.scaleDown, 'desc': t.player.aspect_ratios.scale_down},
   ];
 
   final RxInt width = 0.obs;
@@ -272,13 +273,12 @@ class PlPlayerController {
     double speed = 1.0,
     // 硬件加速
     bool enableHA = true,
-    double? width,
-    double? height,
-    Duration? duration,
     // 是否首次加载
     bool isFirstTime = true,
+    VoidCallback? onVideoLoad,
   }) async {
     try {
+      loaded = false;
       _autoPlay = autoplay;
       _looping = looping;
       // 初始化视频倍速
@@ -295,25 +295,34 @@ class PlPlayerController {
         return;
       }
       // 配置Player 音轨、字幕等等
-      _videoPlayerController = await _createVideoController(
-          dataSource, _looping, enableHA, width, height);
-      // 获取视频时长 00:00
-      _duration.value = duration ?? _videoPlayerController!.state.duration;
-      updateDurationSecond();
-      // 数据加载完成
-      dataStatus.status.value = DataStatus.loaded;
+      _videoPlayerController =
+          await _createVideoController(dataSource, _looping, enableHA);
+      // 等待视频加载完成
+      loadingSubs = _videoPlayerController!.stream.duration.listen((event) {
+        if (loaded) return;
 
-      // listen the video player events
-      if (!_listenersInitialized) {
-        startListeners();
-      }
-      await _initializePlayer(seekTo: seekTo, duration: _duration.value);
-      bool autoEnterFullcreen =
-          setting.get(PLPlayerConfigKey.enableAutoEnter, defaultValue: false);
-      if (autoEnterFullcreen) {
-        await Future.delayed(const Duration(milliseconds: 100));
-        triggerFullScreen();
-      }
+        _duration.value = event;
+        updateDurationSecond();
+
+        onVideoLoad?.call();
+
+        // 数据加载完成
+        dataStatus.status.value = DataStatus.loaded;
+        // listen the video player events
+        if (!_listenersInitialized) {
+          startListeners();
+        }
+        _initializePlayer(seekTo: seekTo, duration: _duration.value);
+        bool autoEnterFullcreen =
+            setting.get(PLPlayerConfigKey.enableAutoEnter, defaultValue: false);
+        if (autoEnterFullcreen) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            triggerFullScreen();
+          });
+        }
+
+        loaded = true;
+      });
     } catch (err) {
       dataStatus.status.value = DataStatus.error;
       print('plPlayer err:  $err');
@@ -325,8 +334,6 @@ class PlPlayerController {
     DataSource dataSource,
     PlaylistMode looping,
     bool enableHA,
-    double? width,
-    double? height,
   ) async {
     // 每次配置时先移除监听
     removeListeners();
@@ -382,6 +389,18 @@ class PlPlayerController {
       await pp.setProperty("blend-subtitles", "video");
     }
 
+    // Proxy
+    if (StorageProvider.config[StorageKey.proxyEnable] ?? false) {
+      String? proxyHost = StorageProvider.config[StorageKey.proxyHost];
+      String? proxyPort = StorageProvider.config[StorageKey.proxyPort];
+
+      if (proxyHost != null && proxyPort != null) {
+        await pp.setProperty("http-proxy", "http://$proxyHost:$proxyPort");
+      }
+    }
+
+    await pp.setProperty('demuxer-lavf-o', 'allowed_extensions=[ts,key]');
+
     _videoController = _videoController ??
         VideoController(
           player,
@@ -397,12 +416,12 @@ class PlPlayerController {
       final assetUrl = dataSource.videoSource!.startsWith("asset://")
           ? dataSource.videoSource!
           : "asset://${dataSource.videoSource!}";
-      player.open(
+      await player.open(
         Media(assetUrl, httpHeaders: dataSource.httpHeaders),
         play: false,
       );
     }
-    player.open(
+    await player.open(
       Media(dataSource.videoSource!, httpHeaders: dataSource.httpHeaders),
       play: false,
     );
@@ -441,6 +460,8 @@ class PlPlayerController {
     }
   }
 
+  bool loaded = false;
+  StreamSubscription? loadingSubs;
   List<StreamSubscription> subscriptions = [];
   final List<Function(Duration position)> _positionListeners = [];
   final List<Function(PlayerStatus status)> _statusListeners = [];
@@ -452,14 +473,14 @@ class PlPlayerController {
         // Get aspact ratio
         _videoPlayerController!.stream.width.listen((event) {
           width.value = event ?? 0;
-          if (event != null && event > 0) {
+          if (event != null && event > 0 && height.value > 0) {
             _direction.value = event > height.value ? 'horizontal' : 'vertical';
           }
         }),
 
         _videoPlayerController!.stream.height.listen((event) {
           height.value = event ?? 0;
-          if (event != null && event > 0) {
+          if (event != null && event > 0 && width.value > 0) {
             _direction.value = width.value > event ? 'horizontal' : 'vertical';
           }
         }),
@@ -537,6 +558,8 @@ class PlPlayerController {
     for (final s in subscriptions) {
       s.cancel();
     }
+    subscriptions.clear();
+    loadingSubs?.cancel();
   }
 
   /// 跳转至指定位置

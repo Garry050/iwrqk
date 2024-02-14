@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:get/get.dart';
+import 'package:iwrqk/i18n/strings.g.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -25,9 +26,11 @@ class PLVideoPlayer extends StatefulWidget {
     required this.controller,
     this.headerControl,
     this.bottomControl,
+    this.inPip = false,
     super.key,
   });
 
+  final bool inPip;
   final PlPlayerController controller;
   final PreferredSizeWidget? headerControl;
   final PreferredSizeWidget? bottomControl;
@@ -225,20 +228,43 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
                 curve: Curves.easeInOut,
                 opacity: _.doubleSpeedStatus.value ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 150),
-                child: Container(
-                    alignment: Alignment.center,
+                child: IntrinsicWidth(
+                  child: Container(
                     decoration: BoxDecoration(
                       color: const Color(0x88000000),
-                      borderRadius: BorderRadius.circular(16.0),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    height: 32.0,
-                    width: 70.0,
-                    child: const Center(
-                      child: Text(
-                        '倍速中',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    height: 32,
+                    child: Center(
+                      child: Text.rich(
+                        TextSpan(
+                          text: t.player.double_speed,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                          children: const [
+                            WidgetSpan(
+                              child: Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(
+                                  Icons.fast_forward,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                        ),
                       ),
-                    )),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -543,32 +569,35 @@ class _PLVideoPlayerState extends State<PLVideoPlayer>
           top: false,
           bottom: false,
           child: Obx(
-            () => Column(
-              children: [
-                if (widget.headerControl != null || _.headerControl != null)
+            () => Visibility(
+              visible: !widget.inPip,
+              child: Column(
+                children: [
+                  if (widget.headerControl != null || _.headerControl != null)
+                    ClipRect(
+                      child: AppBarAni(
+                        controller: animationController,
+                        visible: !_.controlsLock.value && _.showControls.value,
+                        position: 'top',
+                        child: widget.headerControl ?? _.headerControl!,
+                      ),
+                    ),
+                  const Spacer(),
                   ClipRect(
                     child: AppBarAni(
                       controller: animationController,
                       visible: !_.controlsLock.value && _.showControls.value,
-                      position: 'top',
-                      child: widget.headerControl ?? _.headerControl!,
+                      position: 'bottom',
+                      child: widget.bottomControl ??
+                          BottomControl(
+                            controller: widget.controller,
+                            triggerFullScreen:
+                                widget.controller.triggerFullScreen,
+                          ),
                     ),
                   ),
-                const Spacer(),
-                ClipRect(
-                  child: AppBarAni(
-                    controller: animationController,
-                    visible: !_.controlsLock.value && _.showControls.value,
-                    position: 'bottom',
-                    child: widget.bottomControl ??
-                        BottomControl(
-                          controller: widget.controller,
-                          triggerFullScreen:
-                              widget.controller.triggerFullScreen,
-                        ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

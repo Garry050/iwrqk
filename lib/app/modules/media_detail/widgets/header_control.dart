@@ -1,7 +1,6 @@
 import 'package:floating/floating.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:iwrqk/i18n/strings.g.dart';
 
@@ -61,7 +60,7 @@ class _HeaderControlState extends State<HeaderControl> {
       primary: false,
       centerTitle: false,
       automaticallyImplyLeading: false,
-      titleSpacing: 14,
+      titleSpacing: 8,
       title: Row(
         children: [
           ComBtn(
@@ -127,23 +126,39 @@ class _HeaderControlState extends State<HeaderControl> {
             ),
             SizedBox(width: buttonSpace),
           ],
-          Obx(
-            () => SizedBox(
-              width: 46,
+          if (Get.mediaQuery.orientation == Orientation.landscape) ...[
+            Obx(
+              () => SizedBox(
+                width: 46,
+                height: 34,
+                child: TextButton(
+                  style: ButtonStyle(
+                    padding: MaterialStateProperty.all(EdgeInsets.zero),
+                  ),
+                  onPressed: () => showSetSpeedSheet(),
+                  child: Text(
+                    '${_.playbackSpeed}X',
+                    style: textStyle,
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: buttonSpace),
+            SizedBox(
               height: 34,
               child: TextButton(
-                style: ButtonStyle(
-                  padding: MaterialStateProperty.all(EdgeInsets.zero),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                onPressed: () => showSetSpeedSheet(),
+                onPressed: () => showResolutionSheet(),
                 child: Text(
-                  '${_.playbackSpeed}X',
+                  widget.videoDetailCtr!
+                      .resolutions[widget.videoDetailCtr!.resolutionIndex].name,
                   style: textStyle,
                 ),
               ),
             ),
-          ),
-          SizedBox(width: buttonSpace),
+          ],
           ComBtn(
             icon: const Icon(
               Icons.more_vert_outlined,
@@ -168,7 +183,7 @@ class _HeaderControlState extends State<HeaderControl> {
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.background,
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Column(
             children: <Widget>[
@@ -196,25 +211,32 @@ class _HeaderControlState extends State<HeaderControl> {
                     children: [
                       ListTile(
                         leading: const Icon(Icons.hd),
-                        title: const Text('画质', style: titleStyle),
+                        title: Text(t.player.quality, style: titleStyle),
                         subtitle: Text(
-                            '当前： ${widget.videoDetailCtr!.resolutions[widget.videoDetailCtr!.resolutionIndex].name}',
+                            t.player.current_item(
+                                item: widget
+                                    .videoDetailCtr!
+                                    .resolutions[
+                                        widget.videoDetailCtr!.resolutionIndex]
+                                    .name),
                             style: subTitleStyle),
                         onTap: () => {Get.back(), showResolutionSheet()},
                       ),
                       ListTile(
                         leading: const Icon(Icons.speed),
-                        title: const Text('播放速度', style: titleStyle),
+                        title: Text(t.player.playback_speed, style: titleStyle),
                         subtitle: Text(
-                            '当前： ${widget.controller!.playbackSpeed}X',
+                            t.player.current_item(
+                                item: '${widget.controller!.playbackSpeed}X'),
                             style: subTitleStyle),
                         onTap: () => {Get.back(), showSetSpeedSheet()},
                       ),
                       ListTile(
                         leading: const Icon(Icons.rectangle),
-                        title: const Text('画面比例', style: titleStyle),
+                        title: Text(t.player.aspect_ratio, style: titleStyle),
                         subtitle: Text(
-                            '当前： ${widget.controller!.videoFitDEsc.value}',
+                            t.player.current_item(
+                                item: widget.controller!.videoFitDEsc.value),
                             style: subTitleStyle),
                         onTap: () => {Get.back(), showVideoFitSheet()},
                       ),
@@ -244,13 +266,13 @@ class _HeaderControlState extends State<HeaderControl> {
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.background,
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Column(
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('选择播放速度', style: titleStyle),
+                child: Text(t.player.select_playback_speed, style: titleStyle),
               ),
               Expanded(
                 child: Material(
@@ -302,13 +324,13 @@ class _HeaderControlState extends State<HeaderControl> {
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.background,
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Column(
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('选择画面比例', style: titleStyle),
+                child: Text(t.player.select_aspect_ratio, style: titleStyle),
               ),
               Expanded(
                 child: Material(
@@ -357,13 +379,13 @@ class _HeaderControlState extends State<HeaderControl> {
           clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.background,
-            borderRadius: const BorderRadius.all(Radius.circular(12)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
           ),
           child: Column(
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('选择画质', style: titleStyle),
+                child: Text(t.player.select_quality, style: titleStyle),
               ),
               Expanded(
                 child: Material(
