@@ -27,6 +27,7 @@ import '../../data/providers/storage_provider.dart';
 import '../../data/services/plugin/pl_player/service_locator.dart';
 import '../../routes/pages.dart';
 import '../../utils/display_util.dart';
+import '../account/downloads/widgets/downloads_media_preview_list/widget.dart';
 import 'controller.dart';
 import 'widgets/create_video_download_task/widget.dart';
 import 'widgets/gallery/iwr_gallery.dart';
@@ -181,7 +182,12 @@ class _MediaDetailPageState extends State<MediaDetailPage>
     if (_controller.mediaType == MediaType.video) {
       setState(() => isShowing = true);
       final bool autoplay = autoPlayEnable;
-      _controller.playerInit(autoplay: autoplay);
+      if (_controller.isOffline) {
+        _controller.playerInit(
+            autoplay: autoplay, video: _controller.currentOfflineVideoUrl);
+      } else {
+        _controller.playerInit(autoplay: autoplay);
+      }
 
       /// 未开启自动播放时，未播放跳转下一页返回/播放后跳转下一页返回
       _controller.autoPlay.value = !_controller.isLoading;
@@ -238,17 +244,19 @@ class _MediaDetailPageState extends State<MediaDetailPage>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(right: 10),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
                     child: Icon(
                       Icons.lock,
                       size: 42,
-                      color: Colors.grey,
+                      color: Theme.of(context).colorScheme.outline,
                     ),
                   ),
                   Text(
                     t.media.private,
-                    style: const TextStyle(fontSize: 20, color: Colors.grey),
+                    style: TextStyle(
+                        fontSize: 20,
+                        color: Theme.of(context).colorScheme.outline),
                   ),
                 ],
               ),
@@ -472,9 +480,9 @@ class _MediaDetailPageState extends State<MediaDetailPage>
             onTap: gotoProfile,
             child: Text(
               '@${_controller.media.user.username}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12.5,
-                color: Colors.grey,
+                color: Theme.of(context).colorScheme.outline,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
@@ -682,6 +690,11 @@ class _MediaDetailPageState extends State<MediaDetailPage>
 
     return Obx(() {
       Widget child;
+      String? embedUrl;
+
+      if (!_controller.isOffline) {
+        embedUrl = (_controller.media as VideoModel).embedUrl;
+      }
 
       if (_controller.isFectchingResolution ||
           _controller.fetchFailed ||
@@ -716,7 +729,7 @@ class _MediaDetailPageState extends State<MediaDetailPage>
                   ),
           ),
         );
-      } else if ((_controller.media as VideoModel).embedUrl != null) {
+      } else if (embedUrl != null) {
         child = buildWithExitBtn(
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -736,7 +749,7 @@ class _MediaDetailPageState extends State<MediaDetailPage>
               const SizedBox(height: 8),
               FilledButton.icon(
                 onPressed: () {
-                  launchUrlString((_controller.media as VideoModel).embedUrl!);
+                  launchUrlString(embedUrl!);
                 },
                 label: Text(t.common.open),
                 icon: const Icon(Icons.open_in_browser),
@@ -846,20 +859,44 @@ class _MediaDetailPageState extends State<MediaDetailPage>
                     : Column(
                         children: [
                           buildMedia(),
-                          Expanded(
-                            child: Container(
-                              color: Theme.of(context).colorScheme.surface,
-                              child: DefaultTabController(
-                                length: 2,
-                                child: TabBarView(
-                                  children: [
-                                    _buildDetailTab(),
-                                    _buildCommentsTab()
-                                  ],
+                          if (_controller.isOffline) ...[
+                            Expanded(
+                              child: Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: DownloadsMediaPreviewList(
+                                  isPlaylist: true,
+                                  showCompleted: true,
+                                  initialMediaId: _controller.id,
+                                  tag: _controller.offlinePlaylistTag,
+                                  onChangeVideo: (task) {
+                                    if (task.taskId ==
+                                        _controller.currentOfflineTaskId) {
+                                      return;
+                                    }
+                                    if (task.offlineMedia.type ==
+                                        MediaType.video) {
+                                      _controller.getOfflineMedia(task.taskId);
+                                    }
+                                  },
                                 ),
                               ),
                             ),
-                          ),
+                          ] else ...[
+                            Expanded(
+                              child: Container(
+                                color: Theme.of(context).colorScheme.surface,
+                                child: DefaultTabController(
+                                  length: 2,
+                                  child: TabBarView(
+                                    children: [
+                                      _buildDetailTab(),
+                                      _buildCommentsTab()
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ]
                         ],
                       ),
               );

@@ -15,7 +15,7 @@ class DownloadsMediaPreviewList extends StatefulWidget {
   final bool showCompleted;
   final String tag;
   final bool isPlaylist;
-  final String? currentMediaId;
+  final String? initialMediaId;
   final Function(MediaDownloadTask data)? onChangeVideo;
 
   const DownloadsMediaPreviewList({
@@ -23,7 +23,7 @@ class DownloadsMediaPreviewList extends StatefulWidget {
     this.showCompleted = false,
     required this.tag,
     this.isPlaylist = false,
-    this.currentMediaId,
+    this.initialMediaId,
     this.onChangeVideo,
   });
 
@@ -38,9 +38,12 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
   late DownloadsMediaPreviewListController _controller;
   final ScrollController _scrollController = ScrollController();
 
+  RxString currentMediaId = "".obs;
+
   @override
   void initState() {
     super.initState();
+    currentMediaId.value = widget.initialMediaId ?? "";
     _controller =
         Get.find<DownloadsMediaPreviewListController>(tag: widget.tag);
     _parentController.childrenControllers[widget.tag] = _controller;
@@ -63,75 +66,100 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
                     final item = _controller.data[index];
                     final taskId = item.taskId;
 
-                    final DownloadTaskStatus status = _controller
-                            .downloadService
-                            .downloadTasksStatus[item.taskId]
-                            ?.value
-                            .status ??
-                        DownloadTaskStatus.undefined;
+                    return Obx(() {
+                      final DownloadTaskStatus status = _controller
+                              .downloadService
+                              .downloadTasksStatus[item.taskId]
+                              ?.value
+                              .status ??
+                          DownloadTaskStatus.undefined;
 
-                    if (status != DownloadTaskStatus.complete &&
-                        widget.showCompleted) {
-                      return const SizedBox.shrink();
-                    } else if (status == DownloadTaskStatus.complete &&
-                        !widget.showCompleted) {
-                      return const SizedBox.shrink();
-                    }
+                      if (status != DownloadTaskStatus.complete &&
+                          widget.showCompleted) {
+                        return const SizedBox.shrink();
+                      } else if (status == DownloadTaskStatus.complete &&
+                          !widget.showCompleted) {
+                        return const SizedBox.shrink();
+                      }
 
-                    void popupDialog() {
-                      Get.dialog(DownloadTaskDialog(
-                        taskData: item,
-                        onPaused: () {
-                          _controller.downloadService.pauseTask(taskId);
-                        },
-                        onResumed: () {
-                          _controller.downloadService
-                              .resumeTask(taskId)
-                              .then((newTaskId) {
-                            if (newTaskId != null) {
-                              _controller.onResumed(index, newTaskId);
-                            }
-                          });
-                        },
-                        onRetry: () async {
-                          await _controller.retryTask(
-                            index,
-                            item.taskId,
-                          );
-                        },
-                        onDeleted: () async {
-                          await _controller.deleteVideoTask(
-                            index,
-                            item.taskId,
-                          );
-                        },
-                        onOpen: () async {
-                          OpenFile.open(
-                              (await _controller.downloadService
-                                  .getTaskFilePath(item.taskId))!,
-                              type: 'video/mp4',
-                              uti: 'public.mpeg-4');
-                        },
-                        onShare: () async {
-                          Share.shareXFiles([
-                            XFile(
+                      if (widget.isPlaylist) {
+                        return Obx(
+                          () => DownloadMediaPreview(
+                            onTap: () {
+                              if (widget.onChangeVideo != null) {
+                                widget.onChangeVideo!(item);
+                                currentMediaId.value = item.offlineMedia.id;
+                              }
+                            },
+                            taskData: item,
+                            isPlaying:
+                                currentMediaId.value == item.offlineMedia.id,
+                            isPlaylist: true,
+                          ),
+                        );
+                      }
+
+                      gotoDetail() {
+                        Get.toNamed(
+                          "/mediaDetail?id=${item.offlineMedia.id}&isOffline=true",
+                          arguments: {
+                            "mediaType": item.offlineMedia.type,
+                            "taskData": item,
+                          },
+                        );
+                      }
+
+                      void popupDialog() {
+                        Get.dialog(DownloadTaskDialog(
+                          taskData: item,
+                          onPaused: () {
+                            _controller.downloadService.pauseTask(taskId);
+                          },
+                          onResumed: () {
+                            _controller.downloadService
+                                .resumeTask(taskId)
+                                .then((newTaskId) {
+                              if (newTaskId != null) {
+                                _controller.onResumed(index, newTaskId);
+                              }
+                            });
+                          },
+                          onRetry: () async {
+                            await _controller.retryTask(
+                              index,
+                              item.taskId,
+                            );
+                          },
+                          onDeleted: () async {
+                            await _controller.deleteVideoTask(
+                              index,
+                              item.taskId,
+                            );
+                          },
+                          onOpen: () async {
+                            OpenFile.open(
                                 (await _controller.downloadService
                                     .getTaskFilePath(item.taskId))!,
-                                mimeType: 'video/mp4')
-                          ]);
-                        },
-                      ));
-                    }
+                                type: 'video/mp4',
+                                uti: 'public.mpeg-4');
+                          },
+                          onShare: () async {
+                            Share.shareXFiles([
+                              XFile(
+                                  (await _controller.downloadService
+                                      .getTaskFilePath(item.taskId))!,
+                                  mimeType: 'video/mp4')
+                            ]);
+                          },
+                          gotoDetail: gotoDetail,
+                        ));
+                      }
 
-                    return DownloadMediaPreview(
-                      onTap: status == DownloadTaskStatus.complete
-                          ? () {}
-                          : popupDialog,
-                      onDoubleTap: status == DownloadTaskStatus.complete
-                          ? popupDialog
-                          : null,
-                      taskData: item,
-                    );
+                      return DownloadMediaPreview(
+                        onTap: popupDialog,
+                        taskData: item,
+                      );
+                    });
                   },
                   childCount: data.length,
                 ),

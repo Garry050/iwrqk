@@ -4,8 +4,11 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:iwrqk/i18n/strings.g.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:shared_storage/shared_storage.dart' as ss;
 
 import 'controller.dart';
+import 'widgets/custom_color_page.dart';
 import 'widgets/display_mode_dialog.dart';
 import 'widgets/proxy_dialog.dart';
 
@@ -141,7 +144,7 @@ class SettingsPage extends GetView<SettingsController> {
       context,
       title: t.settings.theme,
       description: t.settings.theme_desc,
-      iconData: Icons.color_lens,
+      iconData: Icons.wb_sunny,
       currentOption: controller.getCurrentTheme(),
       options: {
         ThemeMode.system: t.theme.system,
@@ -150,6 +153,33 @@ class SettingsPage extends GetView<SettingsController> {
       },
       onSelected: (value) {
         controller.setThemeMode(value);
+      },
+    );
+  }
+
+  Widget _buildDynamicColorSetting(BuildContext context) {
+    return Obx(
+      () => _buildSwitchSetting(
+        context,
+        title: t.settings.dynamic_color,
+        description: t.settings.dynamic_color_desc,
+        iconData: Icons.palette,
+        value: controller.configService.enableDynamicColor,
+        onChanged: (value) {
+          controller.configService.enableDynamicColor = value;
+        },
+      ),
+    );
+  }
+
+  Widget _buildCustomColorButton(BuildContext context) {
+    return _buildButton(
+      context,
+      title: t.settings.custom_color,
+      description: t.settings.custom_color_desc,
+      iconData: Icons.colorize,
+      onPressed: () {
+        Get.to(() => const CustomColorPage());
       },
     );
   }
@@ -194,6 +224,46 @@ class SettingsPage extends GetView<SettingsController> {
         value: controller.backgroundPlay,
         onChanged: (value) {
           controller.backgroundPlay = value;
+        },
+      ),
+    );
+  }
+
+  Widget _buildDownloadPathSetting(BuildContext context) {
+    return Obx(
+      () => _buildButton(
+        context,
+        title: t.settings.download_path,
+        description: controller.downloadPath,
+        iconData: Icons.download,
+        onPressed: () async {
+          if (GetPlatform.isAndroid) {
+            final uri = await ss.openDocumentTree();
+            if (uri != null) {
+              controller.downloadPath = uri.toString();
+            }
+          } else {
+            final String? result = await FilePicker.platform.getDirectoryPath();
+            if (result != null) {
+              controller.downloadPath = result;
+            }
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildMediaScanSetting(BuildContext context) {
+    return Obx(
+      () => _buildSwitchSetting(
+        context,
+        title: t.settings.allow_media_scan,
+        description: t.settings.allow_media_scan_desc,
+        iconData: Icons.folder_open,
+        value: controller.allowMediaScan,
+        onChanged: (value) {
+          controller.allowMediaScan = value;
+          controller.downloadService.allowMediaScan(value);
         },
       ),
     );
@@ -286,6 +356,13 @@ class SettingsPage extends GetView<SettingsController> {
         children: [
           SettingTitle(title: t.settings.appearance),
           _buildThemeSetting(context),
+          _buildDynamicColorSetting(context),
+          Obx(
+            () => Visibility(
+              visible: !controller.configService.enableDynamicColor,
+              child: _buildCustomColorButton(context),
+            ),
+          ),
           _buildLanguageSetting(context),
           if (GetPlatform.isAndroid) _buildDisplayModeButton(context),
           _buildWorkModeSetting(context),
@@ -295,6 +372,9 @@ class SettingsPage extends GetView<SettingsController> {
           SettingTitle(title: t.settings.player),
           _buildAutoPlaySetting(context),
           _buildBackgroundPlaySetting(context),
+          SettingTitle(title: t.settings.download),
+          if (!GetPlatform.isIOS) _buildDownloadPathSetting(context),
+          if (GetPlatform.isAndroid) _buildMediaScanSetting(context),
           SettingTitle(title: t.settings.about),
           _buildLicenseButton(context),
         ],
