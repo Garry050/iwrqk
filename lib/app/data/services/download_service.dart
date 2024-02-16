@@ -1,17 +1,17 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:ui';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:iwrqk/i18n/strings.g.dart';
 import 'package:path/path.dart';
-import 'package:shared_storage/shared_storage.dart' as ss;
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../utils/log_util.dart';
+import '../../utils/path_util.dart';
 import '../models/download_task.dart';
 import '../models/offline/download_task_media.dart';
 import '../providers/storage_provider.dart';
@@ -34,6 +34,9 @@ class DownloadService extends GetxService {
 
   List<DownloadTask> currentTasks = [];
 
+  // Stream for download completion
+  RxInt currentDownloading = 0.obs;
+
   final ReceivePort _port = ReceivePort();
   static const String _portName = 'downloader_send_port';
 
@@ -41,10 +44,7 @@ class DownloadService extends GetxService {
   void onInit() {
     super.onInit();
 
-    allowMediaScan(
-      StorageProvider.config
-          .get(StorageKey.allowMediaScan, defaultValue: false),
-    );
+    resetAllowMediaScan();
 
     _bindBackgroundIsolate();
 
@@ -57,6 +57,13 @@ class DownloadService extends GetxService {
   void onClose() {
     _unbindBackgroundIsolate();
     super.onClose();
+  }
+
+  void resetAllowMediaScan() {
+    allowMediaScan(
+      StorageProvider.config
+          .get(StorageKey.allowMediaScan, defaultValue: false),
+    );
   }
 
   void _bindBackgroundIsolate() {
@@ -79,6 +86,14 @@ class DownloadService extends GetxService {
         progress: progress,
       );
 
+      if (status == DownloadTaskStatus.enqueued) {
+        currentDownloading++;
+      } else if (status == DownloadTaskStatus.complete ||
+          status == DownloadTaskStatus.failed ||
+          status == DownloadTaskStatus.canceled) {
+        currentDownloading--;
+      }
+
       _downloadTasksStatus.refresh();
     });
   }
@@ -88,69 +103,35 @@ class DownloadService extends GetxService {
   }
 
   Future<void> allowMediaScan(bool allow) async {
-    final downloadPath = await downloadDirectory;
+    final downloadPath = downloadDirectory;
 
     if (downloadPath == null) {
       return;
     }
 
-    final pathList = <String>[];
+    final File noMediaFile = File(join(downloadPath, '.nomedia'));
 
-    pathList.add(downloadPath);
-
-    for (final dirPath in pathList) {
-      if (dirPath.startsWith('content://')) {
-        if (allow) {
-          final file = await ss.findFile(Uri.parse(dirPath), '.nomedia');
-          if (file != null) {
-            await ss.delete(file.uri);
-          }
-        } else {
-          final file = await ss.findFile(Uri.parse(dirPath), '.nomedia');
-          if (file == null) {
-            await ss.createFileAsString(
-              Uri.parse(dirPath),
-              mimeType: '',
-              displayName: '.nomedia',
-              content: '',
-            );
-          }
-        }
-      } else {
-        final File noMediaFile = File(join(dirPath, '.nomedia'));
-
-        if (allow && await noMediaFile.exists()) {
-          noMediaFile.delete(recursive: true);
-        } else if (!allow && !await noMediaFile.exists()) {
-          noMediaFile.create(recursive: true);
-        }
-      }
+    if (allow && await noMediaFile.exists()) {
+      noMediaFile.delete(recursive: true);
+    } else if (!allow && !await noMediaFile.exists()) {
+      noMediaFile.create(recursive: true);
     }
   }
 
-  Future<String?> get downloadDirectory async {
+  String? get downloadDirectory {
     final String? savedDir = StorageProvider.config
         .get(StorageKey.downloadDirectory, defaultValue: null);
 
-    if (savedDir != null && Directory(savedDir).existsSync()) {
+    if (savedDir != null) {
       return savedDir;
     }
 
-    if (GetPlatform.isAndroid) {
-      return getExternalStorageDirectory().then((value) {
-        if (value == null) return null;
-        return join(value.path, "downloads");
-      });
-    } else if (GetPlatform.isIOS) {
-      return getApplicationDocumentsDirectory().then((value) {
-        return join(value.path, "downloads");
-      });
-    } else {
-      return getApplicationDocumentsDirectory().then((value) {
-        return join(value.path, "downloads");
-      });
-    }
+    return join(PathUtil.getVisibleDir().path, 'downloads');
   }
+
+  // User has chosen a directory that is not in the SAF
+  bool get downloadPathInSAF =>
+      downloadDirectory != join(PathUtil.getVisibleDir().path, 'downloads');
 
   @pragma('vm:entry-point')
   static void downloadCallback(String id, int status, int progress) {
@@ -175,20 +156,45 @@ class DownloadService extends GetxService {
     _downloadTasksStatus.refresh();
   }
 
-  Future<bool> _checkPermission() async {
-    if (GetPlatform.isAndroid) {
-      AndroidDeviceInfo androidInfo = await DeviceInfoPlugin().androidInfo;
-      if (androidInfo.version.sdkInt < 12) {
-        await Permission.storage.request();
-        return await Permission.storage.isGranted;
-      } else {
-        return true;
+  Future<bool> checkPermission([bool checkExternalStorage = false]) async {
+    if (!GetPlatform.isMacOS) {
+      if (GetPlatform.isAndroid && checkExternalStorage) {
+        try {
+          await Permission.manageExternalStorage.request();
+          LogUtil.info(await Permission.manageExternalStorage.status);
+          if (!await Permission.manageExternalStorage.isGranted) {
+            return false;
+          }
+        } on Exception catch (e) {
+          LogUtil.error('Request manageExternalStorage permission failed!', e);
+          return false;
+        }
       }
-    } else if (GetPlatform.isIOS) {
-      await Permission.storage.request();
-      return await Permission.storage.isGranted;
+
+      try {
+        await Permission.storage.request().isGranted;
+        LogUtil.info(await Permission.storage.status);
+        return await Permission.storage.isGranted;
+      } on Exception catch (e) {
+        LogUtil.error('Request storage permission failed!', e);
+        return false;
+      }
+    } else {
+      return true;
     }
-    return false;
+  }
+
+  bool checkPermissionForPath(String path) {
+    try {
+      File file = File(join(path, '.iwrqktest'));
+      file.createSync(recursive: true);
+      file.deleteSync();
+    } on FileSystemException catch (e) {
+      LogUtil.error('${'invalidPath'.tr}:$path', e);
+      return false;
+    }
+
+    return true;
   }
 
   Future<String?> addDownloadTask({
@@ -196,7 +202,7 @@ class DownloadService extends GetxService {
     required String fileName,
     required String subDirectory,
   }) async {
-    bool isStorage = await _checkPermission();
+    bool isStorage = await checkPermission(!downloadPathInSAF);
     if (!isStorage) {
       SmartDialog.showToast(t.message.download.no_provide_storage_permission);
       return null;
@@ -212,7 +218,7 @@ class DownloadService extends GetxService {
       }
     }
 
-    String? directory = await downloadDirectory;
+    String? directory = downloadDirectory;
 
     if (directory == null) {
       SmartDialog.showToast(t.message.download.no_provide_storage_permission);
@@ -220,7 +226,10 @@ class DownloadService extends GetxService {
     }
 
     String path = join(directory, subDirectory);
-    Directory(path).createSync(recursive: true);
+
+    if (!Directory(path).existsSync()) {
+      Directory(path).createSync(recursive: true);
+    }
 
     return await FlutterDownloader.enqueue(
       url: downloadUrl,
@@ -303,7 +312,7 @@ class DownloadService extends GetxService {
   Future<int> get currentDownloadingCount async {
     return FlutterDownloader.loadTasksWithRawQuery(
             query:
-                "SELECT * FROM task WHERE status = ${DownloadTaskStatus.running}")
+                "SELECT * FROM task WHERE status = ${DownloadTaskStatus.running.index}")
         .then((value) {
       List<DownloadTask> result = value ?? [];
       return result.length;

@@ -47,6 +47,12 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
     _controller =
         Get.find<DownloadsMediaPreviewListController>(tag: widget.tag);
     _parentController.childrenControllers[widget.tag] = _controller;
+
+    _controller.downloadService.currentDownloading.listen((event) {
+      Get.engine.addPostFrameCallback((_) {
+        setState(() {});
+      });
+    });
   }
 
   @override
@@ -64,7 +70,6 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
                     final item = _controller.data[index];
-                    final taskId = item.taskId;
 
                     return Obx(() {
                       final DownloadTaskStatus status = _controller
@@ -99,7 +104,7 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
                         );
                       }
 
-                      gotoDetail() {
+                      void gotoPlayer() {
                         Get.toNamed(
                           "/mediaDetail?id=${item.offlineMedia.id}&isOffline=true",
                           arguments: {
@@ -109,41 +114,52 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
                         );
                       }
 
+                      void gotoDetail() {
+                        Get.toNamed(
+                          "/mediaDetail?id=${item.offlineMedia.id}",
+                          arguments: {
+                            "mediaType": item.offlineMedia.type,
+                          },
+                        );
+                      }
+
                       void popupDialog() {
                         Get.dialog(DownloadTaskDialog(
                           taskData: item,
-                          onPaused: () {
+                          onPaused: (taskId) {
                             _controller.downloadService.pauseTask(taskId);
                           },
-                          onResumed: () {
-                            _controller.downloadService
+                          onResumed: (taskId) {
+                            return _controller.downloadService
                                 .resumeTask(taskId)
                                 .then((newTaskId) {
                               if (newTaskId != null) {
                                 _controller.onResumed(index, newTaskId);
+                                return newTaskId;
                               }
+                              return null;
                             });
                           },
-                          onRetry: () async {
+                          onRetry: (taskId) async {
                             await _controller.retryTask(
                               index,
                               item.taskId,
                             );
                           },
-                          onDeleted: () async {
+                          onDeleted: (taskId) async {
                             await _controller.deleteVideoTask(
                               index,
                               item.taskId,
                             );
                           },
-                          onOpen: () async {
+                          onOpen: (taskId) async {
                             OpenFile.open(
                                 (await _controller.downloadService
                                     .getTaskFilePath(item.taskId))!,
                                 type: 'video/mp4',
                                 uti: 'public.mpeg-4');
                           },
-                          onShare: () async {
+                          onShare: (taskId) async {
                             Share.shareXFiles([
                               XFile(
                                   (await _controller.downloadService
@@ -151,12 +167,14 @@ class _DownloadsMediaPreviewListState extends State<DownloadsMediaPreviewList>
                                   mimeType: 'video/mp4')
                             ]);
                           },
+                          gotoPlayer: gotoPlayer,
                           gotoDetail: gotoDetail,
                         ));
                       }
 
                       return DownloadMediaPreview(
                         onTap: popupDialog,
+                        gotoDetail: gotoDetail,
                         taskData: item,
                       );
                     });

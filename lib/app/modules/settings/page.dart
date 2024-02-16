@@ -4,8 +4,6 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:iwrqk/i18n/strings.g.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:shared_storage/shared_storage.dart' as ss;
 
 import 'controller.dart';
 import 'widgets/custom_color_page.dart';
@@ -24,6 +22,8 @@ class SettingsPage extends GetView<SettingsController> {
     required Map<T, String> options,
     required void Function(T) onSelected,
   }) {
+    Rx<T> selected = currentOption.obs;
+
     return _buildButton(
       context,
       title: title,
@@ -48,14 +48,17 @@ class SettingsPage extends GetView<SettingsController> {
                 shrinkWrap: true,
                 children: options.entries
                     .map(
-                      (entry) => RadioListTile<T>(
-                        value: entry.key,
-                        title: Text(entry.value),
-                        groupValue: currentOption,
-                        onChanged: (T? value) {
-                          onSelected(value as T);
-                          Get.back();
-                        },
+                      (entry) => Obx(
+                        () => RadioListTile<T>(
+                          value: entry.key,
+                          title: Text(entry.value),
+                          groupValue: selected.value,
+                          onChanged: (T? value) {
+                            if (value != null) {
+                              selected.value = value;
+                            }
+                          },
+                        ),
                       ),
                     )
                     .toList(),
@@ -66,7 +69,19 @@ class SettingsPage extends GetView<SettingsController> {
                 onPressed: () {
                   Get.back();
                 },
-                child: Text(t.notifications.cancel),
+                child: Text(
+                  t.notifications.cancel,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  onSelected(selected.value);
+                  Get.back();
+                },
+                child: Text(t.notifications.confirm),
               ),
             ],
           ),
@@ -82,11 +97,20 @@ class SettingsPage extends GetView<SettingsController> {
     required IconData iconData,
     required bool value,
     required void Function(bool) onChanged,
+    bool restartRequired = false,
   }) {
+    void onSwitch(bool value) {
+      onChanged(value);
+      if (restartRequired) {
+        SmartDialog.showToast(t.message.restart_required);
+      }
+      HapticFeedback.mediumImpact();
+    }
+
     return ListTile(
       enableFeedback: true,
       onTap: () {
-        onChanged(!value);
+        onSwitch(!value);
       },
       title: Text(
         title,
@@ -105,7 +129,7 @@ class SettingsPage extends GetView<SettingsController> {
       ),
       trailing: Switch(
         value: value,
-        onChanged: onChanged,
+        onChanged: onSwitch,
       ),
     );
   }
@@ -236,18 +260,76 @@ class SettingsPage extends GetView<SettingsController> {
         title: t.settings.download_path,
         description: controller.downloadPath,
         iconData: Icons.download,
-        onPressed: () async {
-          if (GetPlatform.isAndroid) {
-            final uri = await ss.openDocumentTree();
-            if (uri != null) {
-              controller.downloadPath = uri.toString();
-            }
-          } else {
-            final String? result = await FilePicker.platform.getDirectoryPath();
-            if (result != null) {
-              controller.downloadPath = result;
-            }
-          }
+        onPressed: controller.changeDownloadPath,
+      ),
+    );
+  }
+
+  Widget _buildLoggingSetting(BuildContext context) {
+    return Obx(
+      () => _buildSwitchSetting(
+        context,
+        title: t.settings.enable_logging,
+        description: t.settings.enable_logging_desc,
+        iconData: Icons.assignment_late,
+        value: controller.enableLogging,
+        restartRequired: true,
+        onChanged: (value) {
+          controller.enableLogging = value;
+        },
+      ),
+    );
+  }
+
+  Widget __buildClearLogsButton(BuildContext context) {
+    return Obx(
+      () => _buildButton(
+        context,
+        title: t.settings.clear_log,
+        description: t.settings.clear_log_desc(size: controller.logSize),
+        iconData: Icons.delete,
+        onPressed: () {
+          Get.dialog(
+            AlertDialog(
+              title: Text(t.settings.clear_log),
+              content: Text(t.message.are_you_sure_to_do_that),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Get.back();
+                  },
+                  child: Text(
+                    t.notifications.cancel,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.outline),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    controller.clearLogs();
+                    Get.back();
+                  },
+                  child: Text(t.notifications.confirm),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildVerboseLoggingSetting(BuildContext context) {
+    return Obx(
+      () => _buildSwitchSetting(
+        context,
+        title: t.settings.enable_verbose_logging,
+        description: t.settings.enable_verbose_logging_desc,
+        iconData: Icons.description,
+        value: controller.enableVerboseLogging,
+        restartRequired: true,
+        onChanged: (value) {
+          controller.enableVerboseLogging = value;
         },
       ),
     );
@@ -323,9 +405,8 @@ class SettingsPage extends GetView<SettingsController> {
         description: t.settings.enable_proxy_desc,
         iconData: Icons.wifi,
         value: controller.enableProxy,
+        restartRequired: true,
         onChanged: (value) {
-          SmartDialog.showToast(t.message.restart_required);
-          HapticFeedback.mediumImpact();
           controller.enableProxy = value;
         },
       ),
@@ -372,9 +453,13 @@ class SettingsPage extends GetView<SettingsController> {
           SettingTitle(title: t.settings.player),
           _buildAutoPlaySetting(context),
           _buildBackgroundPlaySetting(context),
-          SettingTitle(title: t.settings.download),
+          if (!GetPlatform.isIOS) SettingTitle(title: t.settings.download),
           if (!GetPlatform.isIOS) _buildDownloadPathSetting(context),
           if (GetPlatform.isAndroid) _buildMediaScanSetting(context),
+          SettingTitle(title: t.settings.logging),
+          _buildLoggingSetting(context),
+          __buildClearLogsButton(context),
+          _buildVerboseLoggingSetting(context),
           SettingTitle(title: t.settings.about),
           _buildLicenseButton(context),
         ],

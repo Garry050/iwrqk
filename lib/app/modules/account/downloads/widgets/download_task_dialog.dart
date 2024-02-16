@@ -12,12 +12,13 @@ import '../../../../utils/display_util.dart';
 
 class DownloadTaskDialog extends StatelessWidget {
   final MediaDownloadTask taskData;
-  final void Function()? onPaused;
-  final void Function()? onResumed;
-  final void Function()? onDeleted;
-  final void Function()? onRetry;
-  final void Function()? onOpen;
-  final void Function()? onShare;
+  final void Function(String)? onPaused;
+  final Future<String?> Function(String)? onResumed;
+  final void Function(String)? onDeleted;
+  final void Function(String)? onRetry;
+  final void Function(String)? onOpen;
+  final void Function(String)? onShare;
+  final void Function()? gotoPlayer;
   final void Function()? gotoDetail;
 
   DownloadTaskDialog({
@@ -29,27 +30,27 @@ class DownloadTaskDialog extends StatelessWidget {
     this.onRetry,
     this.onOpen,
     this.onShare,
+    this.gotoPlayer,
     this.gotoDetail,
   });
 
   final DownloadService _downloadService = Get.find();
-
   DownloadTaskMediaModel get media => taskData.offlineMedia;
 
   String get taskId => taskData.taskId;
+  Rx<IwrDownloadTaskStatus>? get taskStatus =>
+      _downloadService.downloadTasksStatus[taskId];
 
   Widget _buildStateWidget(BuildContext context) {
-    final taskStatus = _downloadService.downloadTasksStatus[taskId];
-
     return Obx(() {
       if (taskStatus != null) {
-        int downloadedSize = media.size * taskStatus.value.progress ~/ 100;
+        int downloadedSize = media.size * taskStatus!.value.progress ~/ 100;
         int totalSize = media.size;
         double progress = 0;
 
         late Widget statusWidget;
 
-        switch (taskStatus.value.status) {
+        switch (taskStatus!.value.status) {
           case DownloadTaskStatus.enqueued:
             statusWidget = Text(
               t.download.enqueued,
@@ -59,13 +60,13 @@ class DownloadTaskDialog extends StatelessWidget {
               "${t.download.downloading} ${DisplayUtil.getDownloadFileSizeProgress(downloadedSize, totalSize)}",
             );
 
-            progress = taskStatus.value.progress / 100;
+            progress = taskStatus!.value.progress / 100;
           case DownloadTaskStatus.paused:
             statusWidget = Text(
               "${t.download.paused} ${DisplayUtil.getDownloadFileSizeProgress(downloadedSize, totalSize)}",
             );
 
-            progress = taskStatus.value.progress / 100;
+            progress = taskStatus!.value.progress / 100;
           case DownloadTaskStatus.failed:
             statusWidget = Text(
               t.download.failed,
@@ -120,8 +121,6 @@ class DownloadTaskDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taskStatus = _downloadService.downloadTasksStatus[taskId];
-
     return Dialog(
       elevation: 0,
       backgroundColor: Theme.of(context).colorScheme.background,
@@ -186,7 +185,7 @@ class DownloadTaskDialog extends StatelessWidget {
                         child: Material(
                           color: Colors.black.withOpacity(0.4),
                           child: InkWell(
-                            onTap: gotoDetail,
+                            onTap: gotoPlayer,
                             child: const Icon(
                               Icons.play_arrow,
                               size: 48,
@@ -213,14 +212,14 @@ class DownloadTaskDialog extends StatelessWidget {
                           DownloadTaskStatus.failed) ...[
                     IconButton(
                       onPressed: () {
-                        onRetry?.call();
+                        onRetry?.call(taskId);
                         Get.back();
                       },
                       icon: const Icon(Icons.refresh),
                     ),
                     IconButton(
                       onPressed: () {
-                        onDeleted?.call();
+                        onDeleted?.call(taskId);
                         Get.back();
                       },
                       icon: const Icon(Icons.delete),
@@ -229,36 +228,58 @@ class DownloadTaskDialog extends StatelessWidget {
                       DownloadTaskStatus.complete) ...[
                     IconButton(
                       onPressed: () {
-                        onDeleted?.call();
+                        onDeleted?.call(taskId);
                         Get.back();
                       },
                       icon: const Icon(Icons.delete),
                     ),
                     IconButton(
-                      onPressed: onOpen,
-                      icon: const Icon(Icons.open_in_browser),
+                      onPressed: () {
+                        onOpen?.call(taskId);
+                      },
+                      icon: const Icon(Icons.folder),
                     ),
                     IconButton(
-                      onPressed: onShare,
+                      onPressed: () {
+                        onShare?.call(taskId);
+                      },
                       icon: const Icon(Icons.share),
                     ),
                   ] else ...[
                     taskStatus?.value.status == DownloadTaskStatus.paused
                         ? IconButton(
-                            onPressed: onResumed,
-                            icon: const Icon(Icons.play_arrow))
+                            onPressed: () {
+                              onResumed?.call(taskId).then((value) {
+                                if (value != null) {
+                                  taskData.taskId = value;
+                                  final newTaskStatus = _downloadService
+                                      .downloadTasksStatus[value];
+                                  if (newTaskStatus != null) {
+                                    taskStatus?.value = newTaskStatus.value;
+                                  }
+                                }
+                              });
+                            },
+                            icon: const Icon(Icons.play_arrow),
+                          )
                         : IconButton(
-                            onPressed: onPaused,
+                            onPressed: () {
+                              onPaused?.call(taskId);
+                            },
                             icon: const Icon(Icons.pause),
                           ),
                     IconButton(
                       onPressed: () {
-                        onDeleted?.call();
+                        onDeleted?.call(taskId);
                         Get.back();
                       },
                       icon: const Icon(Icons.delete),
                     ),
                   ],
+                  IconButton(
+                    onPressed: gotoDetail,
+                    icon: const Icon(Icons.open_in_browser),
+                  ),
                 ],
               ),
             ),
