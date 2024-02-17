@@ -55,6 +55,7 @@ class SettingsPage extends GetView<SettingsController> {
                           groupValue: selected.value,
                           onChanged: (T? value) {
                             if (value != null) {
+                              HapticFeedback.mediumImpact();
                               selected.value = value;
                             }
                           },
@@ -360,7 +361,7 @@ class SettingsPage extends GetView<SettingsController> {
       currentOption: controller.getCurrentLocalecode(),
       options: t.locales,
       onSelected: (value) {
-        controller.setLanguage(value);
+        controller.setLanguage(AppLocaleUtils.parse(value));
       },
     );
   }
@@ -368,8 +369,8 @@ class SettingsPage extends GetView<SettingsController> {
   Widget _buildLicenseButton(BuildContext context) {
     return _buildButton(
       context,
-      title: t.settings.thrid_party_license,
-      description: t.settings.thrid_party_license_desc,
+      title: t.settings.third_party_license,
+      description: t.settings.third_party_license,
       iconData: Icons.info,
       onPressed: () async {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
