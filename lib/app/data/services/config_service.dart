@@ -25,6 +25,8 @@ abstract class ConfigKey {
   static const String playerSetting = "playerSetting";
 
   static const String notificationPlayer = "notificationPlayer";
+
+  static const String selectedPlayer = "selectedPlayer"; // 新しく追加
 }
 
 class ConfigService extends GetxService {
@@ -69,6 +71,14 @@ class ConfigService extends GetxService {
   FilterSettingModel get filterSetting => _filterSetting.value;
   set filterSetting(FilterSettingModel filterSetting) {
     _filterSetting.value = filterSetting;
+  }
+
+  // 新しく追加：プレーヤー選択のオプション
+  final RxString _selectedPlayer = "mediakit".obs;
+  String get selectedPlayer => _selectedPlayer.value;
+  set selectedPlayer(String player) {
+    _selectedPlayer.value = player;
+    setting[ConfigKey.selectedPlayer] = player;
   }
 
   int crossAxisCount = 2;
@@ -123,5 +133,9 @@ class ConfigService extends GetxService {
 
     _workMode.value =
         setting.get(DynamicConfigKey.workMode, defaultValue: false);
+
+    // 新しく追加：選択されたプレーヤーの初期化
+    _selectedPlayer.value =
+        setting.get(ConfigKey.selectedPlayer, defaultValue: "mediakit");
   }
 }

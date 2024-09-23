@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/const/colors.dart';
@@ -25,8 +26,7 @@ import 'getx.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  MediaKit.ensureInitialized();
-
+  
   await PathUtil.init();
   await StorageProvider.init();
   await LogUtil.init();
@@ -36,6 +36,26 @@ Future<void> main() async {
   ProxyUtil.init();
   await setupServiceLocator();
   ConfigProvider.init();
+
+  // ConfigServiceのインスタンスを取得
+  final configService = Get.put(ConfigService());
+
+  // 選択されたプレーヤーに基づいて初期化
+  if (configService.selectedPlayer == "mediakit") {
+    MediaKit.ensureInitialized(
+      libmpv: LibMpvConfiguration(
+        options: {
+          'hwdec': 'auto-safe',
+          'vd-lavc-threads': '0',
+          'vd-lavc-dr': 'yes',
+          'vd-lavc-fast': 'yes',
+        },
+      ),
+    );
+  } else if (configService.selectedPlayer == "vlc") {
+    // VLCプレーヤーの初期化（必要に応じて）
+    // 注: VLCプレーヤーは通常、使用時に初期化されるため、ここでの特別な初期化は必要ない場合があります
+  }
 
   initGetx();
 

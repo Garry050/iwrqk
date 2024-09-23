@@ -254,6 +254,25 @@ class SettingsPage extends GetView<SettingsController> {
     );
   }
 
+  // 新しく追加：プレーヤー選択のウィジェット
+  Widget _buildPlayerSelectionSetting(BuildContext context) {
+    return _buildMultiSetting<String>(
+      context,
+      title: t.settings.player_selection,
+      description: t.settings.player_selection_desc,
+      iconData: Icons.play_circle_outline,
+      currentOption: controller.selectedPlayer,
+      options: {
+        'mediakit': t.settings.player_mediakit,
+        'vlc': t.settings.player_vlc,
+      },
+      onSelected: (value) {
+        controller.selectedPlayer = value;
+        SmartDialog.showToast(t.message.restart_required);
+      },
+    );
+  }
+
   Widget _buildDownloadPathSetting(BuildContext context) {
     return Obx(
       () => _buildButton(
@@ -462,6 +481,7 @@ class SettingsPage extends GetView<SettingsController> {
           _buildEnableProxySetting(context),
           _buildSetProxyButton(context),
           SettingTitle(title: t.settings.player),
+          _buildPlayerSelectionSetting(context), // 新しく追加したウィジェット
           _buildAutoPlaySetting(context),
           _buildBackgroundPlaySetting(context),
           if (!GetPlatform.isIOS) SettingTitle(title: t.settings.download),

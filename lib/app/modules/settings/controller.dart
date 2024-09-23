@@ -98,6 +98,14 @@ class SettingsController extends GetxController {
     configService.workMode = value;
   }
 
+  // 新しく追加：プレーヤー選択のためのRxString
+  final RxString _selectedPlayer = 'mediakit'.obs;
+  String get selectedPlayer => _selectedPlayer.value;
+  set selectedPlayer(String value) {
+    _selectedPlayer.value = value;
+    configService.selectedPlayer = value;
+  }
+
   @override
   void onInit() {
     super.onInit();
@@ -120,6 +128,9 @@ class SettingsController extends GetxController {
         StorageProvider.config[StorageKey.verboseLoggingEnable] ?? false;
 
     LogUtil.getSize().then((value) => _logSize.value = value);
+
+    // 新しく追加：選択されたプレーヤーの初期化
+    _selectedPlayer.value = configService.selectedPlayer;
   }
 
   void logout() {

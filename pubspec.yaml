@@ -72,6 +72,9 @@ dependencies:
   audio_session: ^0.1.18
   floating: ^2.0.1
 
+  # VLC player (alternative)
+  flutter_vlc_player: ^7.4.0
+
   # desktop
   window_manager: ^0.3.8
 
