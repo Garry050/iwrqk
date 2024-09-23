@@ -1,12 +1,6 @@
 name: Build Release
 
-on:
-  push:
-    # branches:
-    #   - 'master'
-    #   - 'build'
-    tags:
-      - v*
+on: workflow_dispatch
 
 env:
   APP_PACK_NAME: iwrqk
